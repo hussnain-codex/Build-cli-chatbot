@@ -1,22 +1,23 @@
 import os
 from dotenv import load_dotenv
-from groq import Groq
+from langchain_groq import ChatGroq
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 load_dotenv()
 
-api_key = os.getenv("GROQ_API_KEY")
-
-if not api_key:
+if not os.getenv("GROQ_API_KEY"):
     print("ERROR: GROQ_API_KEY not found")
     exit()
 
-client = Groq(api_key=api_key)
+llm = ChatGroq(
+    model="openai/gpt-oss-20b",
+    temperature=0.7
+)
 
 messages = [
-    {
-        "role": "system",
-        "content": "You are a helpful assistant."
-    }
+    SystemMessage(
+        content="You are a helpful assistant."
+    )
 ]
 
 print("AI Chatbot Started!")
@@ -30,31 +31,18 @@ while True:
         print("Goodbye!")
         break
 
-    messages.append({
-        "role": "user",
-        "content": user_input
-    })
-
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-20b",
-        messages=messages,
-        stream=True
+    # Add user message
+    messages.append(
+        HumanMessage(content=user_input)
     )
 
-    print("AI: ", end="")
+    # Send complete conversation
+    response = llm.invoke(messages)
 
-    assistant_response = ""
+    # Display AI response
+    print("AI:", response.content)
 
-    for chunk in response:
-        content = chunk.choices[0].delta.content
-
-        if content:
-            print(content, end="", flush=True)
-            assistant_response += content
-
-    print()
-
-    messages.append({
-        "role": "assistant",
-        "content": assistant_response
-    })
+    # Save AI response
+    messages.append(
+        AIMessage(content=response.content)
+    )
