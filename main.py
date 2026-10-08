@@ -1,4 +1,5 @@
 import os
+import json
 import argparse
 
 from dotenv import load_dotenv
@@ -28,7 +29,7 @@ load_dotenv()
 
 
 # ==========================================
-# Get LLM
+# Get LLM Provider
 # ==========================================
 
 def get_llm(provider):
@@ -45,6 +46,7 @@ def get_llm(provider):
             temperature=0.7
         )
 
+
     elif provider == "gemini":
 
         if not os.getenv("GOOGLE_API_KEY"):
@@ -57,12 +59,14 @@ def get_llm(provider):
             temperature=0.7
         )
 
+
     elif provider == "ollama":
 
         return ChatOllama(
             model="llama3.2",
             temperature=0.7
         )
+
 
     else:
 
@@ -72,7 +76,7 @@ def get_llm(provider):
 
 
 # ==========================================
-# Prompt
+# Prompt Template
 # ==========================================
 
 prompt = ChatPromptTemplate.from_messages([
@@ -91,6 +95,7 @@ prompt = ChatPromptTemplate.from_messages([
         "human",
         "{question}"
     )
+
 ])
 
 
@@ -102,7 +107,7 @@ parser_output = StrOutputParser()
 
 
 # ==========================================
-# Create Chain
+# Create LCEL Chain
 # ==========================================
 
 def get_chain(provider):
@@ -110,6 +115,137 @@ def get_chain(provider):
     llm = get_llm(provider)
 
     return prompt | llm | parser_output
+
+
+# ==========================================
+# Save Conversation
+# ==========================================
+
+def save_conversation(history):
+
+    data = []
+
+    for message in history:
+
+        if isinstance(message, HumanMessage):
+
+            data.append({
+                "role": "user",
+                "content": message.content
+            })
+
+        elif isinstance(message, AIMessage):
+
+            data.append({
+                "role": "assistant",
+                "content": message.content
+            })
+
+
+    with open(
+        "conversation.json",
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            data,
+            file,
+            indent=4,
+            ensure_ascii=False
+        )
+
+
+    print(
+        "Conversation saved to conversation.json\n"
+    )
+
+
+# ==========================================
+# Load Conversation
+# ==========================================
+
+def load_conversation():
+
+    if not os.path.exists("conversation.json"):
+
+        print(
+            "No saved conversation found.\n"
+        )
+
+        return []
+
+
+    try:
+
+        with open(
+            "conversation.json",
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            data = json.load(file)
+
+
+        history = []
+
+
+        for message in data:
+
+            if message["role"] == "user":
+
+                history.append(
+                    HumanMessage(
+                        content=message["content"]
+                    )
+                )
+
+
+            elif message["role"] == "assistant":
+
+                history.append(
+                    AIMessage(
+                        content=message["content"]
+                    )
+                )
+
+
+        print(
+            "Conversation loaded from conversation.json\n"
+        )
+
+
+        return history
+
+
+    except Exception as e:
+
+        print(
+            f"Error loading conversation: {e}\n"
+        )
+
+        return []
+
+
+# ==========================================
+# Delete Saved Conversation
+# ==========================================
+
+def delete_conversation():
+
+    if os.path.exists("conversation.json"):
+
+        os.remove("conversation.json")
+
+        print(
+            "Saved conversation deleted from JSON.\n"
+        )
+
+    else:
+
+        print(
+            "No conversation.json found.\n"
+        )
 
 
 # ==========================================
@@ -148,6 +284,7 @@ try:
 except Exception as e:
 
     print(f"ERROR: {e}")
+
     exit()
 
 
@@ -159,28 +296,31 @@ history = []
 
 
 # ==========================================
-# Start Chatbot
+# Chatbot Header
 # ==========================================
 
-print("=" * 45)
-print("        MULTI-PROVIDER AI CHATBOT")
-print("=" * 45)
+print("=" * 50)
+print("           MULTI-PROVIDER AI CHATBOT")
+print("=" * 50)
 
-print(f"Provider: {provider}")
+print(f"Current provider: {provider}")
 
 print("\nCommands:")
 print("/model              → Show current provider")
 print("/model groq         → Switch to Groq")
 print("/model gemini       → Switch to Gemini")
 print("/model ollama       → Switch to Ollama")
-print("/clear              → Clear conversation")
-print("exit                → Quit chatbot")
+print("/clear              → Clear current memory")
+print("/save               → Save conversation to JSON")
+print("/load               → Load conversation from JSON")
+print("/delete             → Delete saved JSON only")
+print("exit                → Exit chatbot")
 
 print()
 
 
 # ==========================================
-# Chat Loop
+# Main Chat Loop
 # ==========================================
 
 while True:
@@ -192,31 +332,33 @@ while True:
     except KeyboardInterrupt:
 
         print("\nGoodbye!")
+
         break
 
 
-    # --------------------------------------
+    # ======================================
     # Exit
-    # --------------------------------------
+    # ======================================
 
     if user_input.lower() == "exit":
 
         print("Goodbye!")
+
         break
 
 
-    # --------------------------------------
-    # Empty Input
-    # --------------------------------------
+    # ======================================
+    # Ignore Empty Input
+    # ======================================
 
     if not user_input.strip():
 
         continue
 
 
-    # --------------------------------------
+    # ======================================
     # Show Current Provider
-    # --------------------------------------
+    # ======================================
 
     if user_input.lower() == "/model":
 
@@ -227,9 +369,9 @@ while True:
         continue
 
 
-    # --------------------------------------
+    # ======================================
     # Switch Provider
-    # --------------------------------------
+    # ======================================
 
     if user_input.lower().startswith("/model "):
 
@@ -246,7 +388,10 @@ while True:
         ]:
 
             print(
-                "Invalid provider.\n"
+                "Invalid provider."
+            )
+
+            print(
                 "Available: groq, gemini, ollama\n"
             )
 
@@ -255,7 +400,11 @@ while True:
 
         try:
 
-            chain = get_chain(new_provider)
+            new_chain = get_chain(
+                new_provider
+            )
+
+            chain = new_chain
 
             provider = new_provider
 
@@ -263,33 +412,84 @@ while True:
                 f"Switched to {provider}\n"
             )
 
+
         except Exception as e:
 
             print(
                 f"Could not switch provider: {e}\n"
             )
 
+
         continue
 
 
-    # --------------------------------------
-    # Clear Conversation
-    # --------------------------------------
+    # ======================================
+    # Clear Current Memory
+    # ======================================
 
     if user_input.lower() == "/clear":
 
         history.clear()
 
         print(
-            "Conversation history cleared.\n"
+            "Current conversation memory cleared.\n"
         )
 
         continue
 
 
-    # --------------------------------------
+    # ======================================
+    # Save Conversation
+    # ======================================
+
+    if user_input.lower() == "/save":
+
+        try:
+
+            save_conversation(history)
+
+        except Exception as e:
+
+            print(
+                f"Error saving conversation: {e}\n"
+            )
+
+        continue
+
+
+    # ======================================
+    # Load Conversation
+    # ======================================
+
+    if user_input.lower() == "/load":
+
+        history = load_conversation()
+
+        continue
+
+
+    # ======================================
+    # Delete JSON Only
+    # ======================================
+
+    if user_input.lower() == "/delete":
+
+        try:
+
+            delete_conversation()
+
+        except Exception as e:
+
+            print(
+                f"Error deleting conversation: {e}\n"
+            )
+
+        continue
+
+
+    # ======================================
     # AI Response
-    # --------------------------------------
+    # ======================================
 
     print("AI: ", end="")
 
@@ -327,9 +527,9 @@ while True:
         continue
 
 
-    # --------------------------------------
-    # Save Conversation
-    # --------------------------------------
+    # ======================================
+    # Store Conversation in Memory
+    # ======================================
 
     history.append(
 
@@ -338,6 +538,7 @@ while True:
         )
 
     )
+
 
     history.append(
 
